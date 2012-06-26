@@ -1,6 +1,6 @@
 """Extension to the Polygon Module
 """
-import Polygon,Polygon.IO
+import Polygon,Polygon.IO,Polygon.Utils
 import Polygon.Shapes
 from math import sin, cos, pi, ceil, sqrt, pow
 from operator import itemgetter
@@ -9,7 +9,7 @@ import Polygon, Polygon.IO
 import ImageOps
 import os
 
-
+from py_image import PyImage
 
 """ PyPolygon adds to functionality to Polygon """
 class PolygonUtil():
@@ -173,6 +173,7 @@ class PolygonUtil():
     #    print xmin, xmax, ymin, ymax
     #    print abs(xmin - xmax), abs(ymin - ymax)    
         #polygons are shifted so that both polygons after merge lie in the first quadrant
+#TODO(robin.codein@gmail.com) inver for q instead of t        
         offset_x,offset_y = 0,0
         if xmin<0:
             offset_x = -xmin
@@ -234,7 +235,28 @@ class PolygonUtil():
         print 'Merged %s %s' % (filet,fileq)
         return base_im
     
-         
+    """Given a polygon suggests boxes of various dimensions to fill it"""
+    def box_fill(self,polygon,fill_ratio =17,write=False):        
+            
+        xmin, xmax, ymin, ymax = polygon.boundingBox()
+        min_width = min((abs(xmin- xmax), abs(ymin - ymax)))
+        boxes = []
+        for i in range(3,fill_ratio):
+            width = min_width/i
+            rect = Polygon.Shapes.Rectangle(width)
+            x, y = xmin, ymin
+            while x < xmax:
+                while y < ymax:
+                    poly_util.redraw(rect,x,y)
+                    if polygon.covers(rect):
+                        polygon = polygon - rect
+                        boxes.append(dict(width=width,center=(x,y)))
+                    y+=width
+                x +=width
+                y=ymin
+        if write:
+            Polygon.IO.writeSVG('box_fill.svg', (poly,))
+        return boxes         
         
 poly_util = PolygonUtil()
         
@@ -287,9 +309,74 @@ def images_merge():
             base.save(base_file, "PNG")
             base = base_file            
 
+def fill_polygon(path,poly_base, scale = 3):
+    poly_base.scale(scale,scale)
+    path = '/home/codein/artist/test1'
+    listing = os.listdir(path)
+    base = None
+    count = 0
+    for infile in listing: 
+        file = "%s/%s" %( path,infile)
+        poly = poly_util.getPolygon()
+        for i in range(10):
+            pass
+            
+
+
+def test1():
+    file = '/home/codein/artist/test1/Hawk_Tattoo_by_oooJ03ooo.jpg'
+    poly = poly_util.getPolygon(file)
+    poly.scale(3,3)
+    xmin, xmax, ymin, ymax = poly.boundingBox()
+#    print xmin, xmax, ymin, ymax
+#    print abs(xmin - xmax), abs(ymin - ymax)    
+    #polygons are shifted so that both polygons after merge lie in the first quadrant
+#TODO(robin.codein@gmail.com) inver for q instead of t  
+#TODO(robin.codein@gmail.com) write a function for shifht into first quadratn     
+    offset_x,offset_y = 0,0
+    if xmin<0:
+        offset_x = -xmin
+    if ymin <0:
+        offset_y = -ymin        
+    t_x,t_y = poly.center()
+    poly_util.redraw(poly, t_x+offset_x, t_y+offset_y)
+   
+    
+    boxes = poly_util.box_fill(poly)
+    
+    
+    
+#    for box in boxes:
+#        print box
+    xmin, xmax, ymin, ymax = poly.boundingBox()
+    max_width = int(max((xmax,  ymax)))
+    filename = '/home/codein/artist/celctic.png'
+    base_im = Image.open('/home/codein/workspace3/artist/base.png')
+    base_im=poly_util.convert_to_alpha(base_im)    
+    image = PyImage(base_im,max_width,max_width)
+    fill_poly = poly_util.getPolygon(filename)
+    for box in boxes:
+        print box
+    for box in boxes:
+        print box
+        x,y=box['center']
+        width = box.get('width')
+        rect = Polygon.Shapes.Rectangle(width)
+        poly_util.redraw(rect,x,y)
+        x0, x1, y0, y1 = rect.boundingBox()
+
+#        fill_poly.warpToBox(x0, x1, y0, y1)
+        poly_util.redraw(fill_poly,x,y)
+        print fill_poly.boundingBox()
+        f_xmin, f_xmax, f_ymin, f_ymax = fill_poly.boundingBox()
+        
+        q_im= Image.open(filename)
+#        q_im=q_im.resize((int(abs(f_xmin- f_xmax)),int(abs(f_ymin- f_ymax))))
+        image.paste(fill_poly,q_im)
+    image.show()      
     
 if __name__ == "__main__":
-    images_merge()
+    test1()
 
 
 
