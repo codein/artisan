@@ -255,7 +255,7 @@ class PolygonUtil():
                 x +=width
                 y=ymin
         if write:
-            Polygon.IO.writeSVG('box_fill.svg', (poly,))
+            Polygon.IO.writeSVG('box_fill.svg', (polygon,))
         return boxes         
         
 poly_util = PolygonUtil()
@@ -342,38 +342,48 @@ def test1():
     poly_util.redraw(poly, t_x+offset_x, t_y+offset_y)
    
     
-    boxes = poly_util.box_fill(poly)
+    boxes = poly_util.box_fill(poly,fill_ratio=17,write=True)
     
     
     
 #    for box in boxes:
 #        print box
     xmin, xmax, ymin, ymax = poly.boundingBox()
-    max_width = int(max((xmax,  ymax)))
-    filename = '/home/codein/artist/celctic.png'
+    max_width = int(  ymax)
+    max_height = int(  xmax)
+
     base_im = Image.open('/home/codein/workspace3/artist/base.png')
     base_im=poly_util.convert_to_alpha(base_im)    
-    image = PyImage(base_im,max_width,max_width)
-    fill_poly = poly_util.getPolygon(filename)
+    image = PyImage(base_im,max_width,max_height)
+    image_poly = Polygon.Shapes.Rectangle(max_width,max_height)
+    path = '/home/codein/artist/test1'
+    listing = os.listdir(path)
+    base = None
+    count = 0
+    files = []
+    for infile in listing: 
+        files.append( "%s/%s" %( path,infile))
     for box in boxes:
         print box
-    for box in boxes:
-        print box
+        count+=1
+        filename=files[count%len(files)]
+        print filename
         x,y=box['center']
-        width = box.get('width')
+        width = box.get('width')        
         rect = Polygon.Shapes.Rectangle(width)
         poly_util.redraw(rect,x,y)
         x0, x1, y0, y1 = rect.boundingBox()
-
-#        fill_poly.warpToBox(x0, x1, y0, y1)
+        fill_poly = poly_util.getPolygon(filename)
+        fill_poly.warpToBox(x0, x1, y0, y1)
         poly_util.redraw(fill_poly,x,y)
-        print fill_poly.boundingBox()
-        f_xmin, f_xmax, f_ymin, f_ymax = fill_poly.boundingBox()
-        
+        image_poly = image_poly - fill_poly
+        f_xmin, f_xmax, f_ymin, f_ymax = fill_poly.boundingBox()        
         q_im= Image.open(filename)
-#        q_im=q_im.resize((int(abs(f_xmin- f_xmax)),int(abs(f_ymin- f_ymax))))
+        q_im=poly_util.convert_to_alpha(q_im) 
+        q_im=q_im.resize((int(abs(f_xmin- f_xmax)),int(abs(f_ymin- f_ymax))))
         image.paste(fill_poly,q_im)
-    image.show()      
+    image.save()
+    Polygon.IO.writeSVG('fill_poly.svg', (fill_poly,))
     
 if __name__ == "__main__":
     test1()
