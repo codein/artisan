@@ -98,7 +98,6 @@ class PolygonUtil():
         im= Image.open(file)
         pixels = list(im.getdata())
         width, height = im.size
-        print width,height
         pixels = [pixels[i * width:(i + 1) * width] for i in xrange(height)]
         p = Polygon.Polygon()
         x_contours_first = []
@@ -256,7 +255,88 @@ class PolygonUtil():
                 y=ymin
         if write:
             Polygon.IO.writeSVG('box_fill.svg', (polygon,))
-        return boxes         
+        return boxes   
+    
+    def get_width(self,polygon):
+        xmin, xmax, ymin, ymax = polygon.boundingBox()
+        return (abs(xmin- xmax)) 
+     
+    def get_height(self,polygon):
+        xmin, xmax, ymin, ymax = polygon.boundingBox()
+        return (abs(ymin - ymax))  
+
+    """Given a polygonA and a polygonB suggest a location at which the polygonB can be fitted inside A"""
+    def insert_image(self,polygonA,polygonB,fill_ratio =5):
+        xmin, xmax, ymin, ymax = polygonA.boundingBox()
+        boundingBox=polygonB.boundingBox()
+#        print 'A',polygonA.boundingBox()
+#        print 'B',polygonB.boundingBox()
+        config = False
+        i=1
+        while i < fill_ratio and not config:
+            temp_polygonB = Polygon.Polygon(polygonB)
+            scale = 1.0/i            
+#            print 'temp_B',temp_polygonB.boundingBox()
+            temp_polygonB.scale(scale, scale)
+#            print 'scale',scale
+#            print 'temp_B',temp_polygonB.boundingBox()
+            x, y = xmin, ymin            
+            while x < xmax and not config:
+                while y < ymax and not config:
+                    poly_util.redraw(temp_polygonB,x,y)
+                    if polygonA.covers(temp_polygonB):
+                        polygonA = polygonA - temp_polygonB
+                        config = dict(width=scale,center=(x,y),i=i,boundingboxAfter=temp_polygonB.boundingBox())
+#                        print 'config',config
+#                        print 'before',polygonB.boundingBox()
+                        polygonB.scale(scale,scale)
+                        self.redraw(polygonB, x, y)
+#                        print 'after',polygonB.boundingBox()
+#                        print 'after temp_polygonB',temp_polygonB.boundingBox()
+                    y += self.get_height(temp_polygonB)
+                x += self.get_width(temp_polygonB)
+                y=ymin
+            i+=1  
+        return config,polygonA
+ 
+    """Given a polygon and a set of images suggests images of various dimensions,configs to fill it"""
+    def image_fill(self,polygon,images,fill_ratio = 5,write=False):        
+            
+        xmin, xmax, ymin, ymax = polygon.boundingBox()
+#        print 'base before',polygon.boundingBox()            
+        polygon.scale(5,5)
+        self.move_to_first_quadrant(polygon)
+#        print 'base before',polygon.boundingBox()
+        min_width = min((abs(xmin- xmax), abs(ymin - ymax)))
+        current_image = 0
+        num_images = len(images)
+        configs = []
+        num_non_fitting = 0         
+        while num_non_fitting < len(images):
+            curr_image = images[current_image%num_images]
+            current_image += 1
+            rect = self.getPolygon(curr_image)            
+            config,polygon = self.insert_image(polygon, rect,fill_ratio=fill_ratio)
+            if not config:
+                num_non_fitting += 1
+                print num_non_fitting
+            else:
+                config['image']=curr_image
+                configs.append(config)
+        if write:
+            Polygon.IO.writeSVG('image_fill.svg', (polygon,))
+        return configs      
+    
+    """Given a polygon shift it to first quadrant"""
+    def move_to_first_quadrant(self,polygon):
+        xmin, xmax, ymin, ymax = polygon.boundingBox()
+        offset_x,offset_y = 0,0
+        if xmin<0:
+            offset_x = -xmin
+        if ymin <0:
+            offset_y = -ymin        
+        t_x,t_y = polygon.center()
+        self.redraw(polygon, t_x+offset_x, t_y+offset_y)        
         
 poly_util = PolygonUtil()
         
@@ -309,18 +389,7 @@ def images_merge():
             base.save(base_file, "PNG")
             base = base_file            
 
-def fill_polygon(path,poly_base, scale = 3):
-    poly_base.scale(scale,scale)
-    path = '/home/codein/artist/test1'
-    listing = os.listdir(path)
-    base = None
-    count = 0
-    for infile in listing: 
-        file = "%s/%s" %( path,infile)
-        poly = poly_util.getPolygon()
-        for i in range(10):
-            pass
-            
+        
 
 
 def test1():
@@ -385,10 +454,57 @@ def test1():
     image.save()
     Polygon.IO.writeSVG('fill_poly.svg', (fill_poly,))
     
+def fill_polygon(path='',poly_base='', scale = 1):
+    path = '/home/codein/artist/test1'
+    listing = os.listdir(path)
+    base = None
+    count = 0
+    images = []
+    for infile in listing: 
+        file = "%s/%s" %( path,infile)
+        images.append(file)
+    print images
+    file = '/home/codein/artist/celctic.png'
+    polygon = poly_util.getPolygon(file)    
+    polygon.scale(scale,scale)
+    configs = poly_util.image_fill(polygon, images, write = True)
+    print configs
+    
+    xmin, xmax, ymin, ymax = polygon.boundingBox()
+    max_width = int(  ymax)
+    max_height = int(  xmax)
+
+    base_im = Image.open('/home/codein/workspace3/artist/base.png')
+    base_im=poly_util.convert_to_alpha(base_im)    
+    image = PyImage(base_im,max_width,max_height)
+    image_poly = Polygon.Shapes.Rectangle(max_width,max_height)
+    i =0
+    for box in configs:
+        print box
+        filename=box['image']
+        x,y=box['center']
+        width = box.get('width')        
+        fill_poly = poly_util.getPolygon(filename)     
+        #resize and redraw polygon   
+#        print 'before',fill_poly.boundingBox(),fill_poly.center()
+        fill_poly.scale(width,width)
+        poly_util.redraw(fill_poly,x,y)
+#        print 'after',fill_poly.boundingBox(),fill_poly.center()
+        image_poly = image_poly - fill_poly
+        f_xmin, f_xmax, f_ymin, f_ymax = fill_poly.boundingBox()   
+        q_im= Image.open(filename)
+        q_im=poly_util.convert_to_alpha(q_im) 
+        q_width,q_height = q_im.size
+        #resize and paste image
+        q_im=q_im.resize((int(q_width*(width)),int(q_height*(width))))
+        image.paste(fill_poly,q_im)
+    image.save()
+    
 if __name__ == "__main__":
-    test1()
+    fill_polygon()
 
-
+#TODO(robin.codein@gmail.com) image mininumb bounding box
+#TODO inteligent paste ot laye awre paste
 
 
 
